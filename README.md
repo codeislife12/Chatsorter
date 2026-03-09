@@ -2,24 +2,24 @@
 
 **Persistent memory API for chatbots and AI assistants.**
 
-ChatSorter gives your bot the ability to remember users across sessions — names, preferences, relationships, and anything else that matters — without any changes to your core chat logic.
+ChatSorter gives your bot the ability to remember users across sessions  names, preferences, relationships, and anything else that matters  without any changes to your core chat logic.
 
 ---
 
 ## How it works
 
-Every message sent to `/process` is buffered and scored for importance. Every 5 messages a background summary is generated and stored. When a user returns, `/search` retrieves the most relevant memories automatically — ranked by semantic similarity, importance, and recency.
+Every message sent to `/process` is buffered and scored for importance. Every 5 messages a background summary is generated and stored. When a user returns, `/search` retrieves the most relevant memories automatically  ranked by semantic similarity, importance, and recency.
 
 High-importance facts (allergies, names, preferences, relationships) are promoted to a cross-session master memory so they are never lost even across different chat sessions.
 
 ```
 User sends message
        ↓
-  POST /process        ← fast, never blocks (~5ms)
+  POST /process       
        ↓
-  Background worker    ← summarizes every 5 messages
+  Background server    ← summarizes every 5 messages
        ↓
-  POST /search         ← returns ranked memories on next session
+  POST /search         
 ```
 
 ---
@@ -28,7 +28,7 @@ User sends message
 
 ### 1. Get an API key
 
-Go to [chatsorter-website.vercel.app](https://chatsorter-website.vercel.app) and request a free beta key.
+Go to [chatsorter-website.vercel.app](https://chatsorter-website.vercel.app) and create a free account to get a key.
 
 ### 2. Store a message
 
@@ -79,7 +79,7 @@ memories  = result.json()["retrieved_memories"]
 ## API Reference
 
 ### `POST /process`
-Store a message. Returns immediately — summarization runs in the background.
+Store a message. Returns immediately, summarization runs in the background.
 
 **Request**
 ```json
@@ -224,16 +224,15 @@ Every message is scored 0-10 for importance before storage:
 | Pet | "My dog is named Max" | +2.0 |
 | Preference | "My favorite movie is..." | +1.5 |
 
-Memories scoring above 8.0 are promoted to cross-session master memory automatically.
+Memories scoring above 8.0 are promoted to master memory automatically.
 
 ---
 
 ## Examples
 
 See the [`/examples`](./examples) folder for:
-- `basic_integration.py` — minimal working integration
-- `system_prompt_injection.py` — how to inject memories into your LLM prompt
-- `companion_bot.py` — full companion bot example
+- `basic_integration.py`  minimal working integration
+- `system_prompt_injection.py`  how to inject memories into your LLM prompt
 
 ---
 
@@ -243,7 +242,7 @@ See the [`/examples`](./examples) folder for:
 No. Only summaries are stored. Raw messages are held in memory briefly for summarization then discarded.
 
 **What happens if the LLM is busy?**
-`/process` returns immediately regardless. Summarization is queued and runs in the background. Your users never wait.
+`/process` returns immediately regardless. Summarization is queued and runs in the background.
 
 **How many messages before a summary is generated?**
 Default is every 5 messages. Configurable via `/update-settings`.
@@ -255,4 +254,4 @@ The API is closed source. Examples and documentation are open.
 
 ## Get started
 
-→ [Get a free beta key](https://chatsorter-website.vercel.app)
+[Get a free beta key](https://chatsorter-website.vercel.app)
