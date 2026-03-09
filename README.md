@@ -36,7 +36,7 @@ Go to [chatsorter-website.vercel.app](https://chatsorter-website.vercel.app) and
 import requests
 
 API_KEY = "your_api_key_here"
-BASE_URL = "https://your-chatsorter-url.com"
+BASE_URL = "https://ungilled-loan-implosively.ngrok-free.dev"
 
 requests.post(f"{BASE_URL}/process", json={
     "chat_id": "user_123_session_1",
