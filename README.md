@@ -1,257 +1,235 @@
 # ChatSorter
 
-**Persistent memory API for chatbots and AI assistants.**
+**Memory infrastructure for AI applications. Drop it into your stack in one API call.**
 
-ChatSorter gives your bot the ability to remember users across sessions  names, preferences, relationships, and anything else that matters  without any changes to your core chat logic.
+Your AI chatbot gets slower and more expensive with every message. By turn 20, you're resending thousands of tokens every response. ChatSorter extracts what matters, stores it, and retrieves only what's relevant, a few hundred tokens instead of your entire conversation history.
 
 ---
 
-## How it works
+## Why ChatSorter
 
-Every message sent to `/process` is buffered and scored for importance. Every 5 messages a background summary is generated and stored. When a user returns, `/search` retrieves the most relevant memories automatically  ranked by semantic similarity, importance, and recency.
+- **Token cost reduction**, retrieve 8 relevant memories instead of resending 200 messages
+- **Persistent memory across sessions**, users don't repeat themselves every conversation  
+- **Self-hostable**, run it entirely on your own infrastructure, data never leaves your network
+- **Model agnostic**, works with OpenAI, Anthropic, Ollama, or any LLM
+- **One API call**, no SDK required, no configuration, no architecture changes
 
-High-importance facts (allergies, names, preferences, relationships) are promoted to a cross-session master memory so they are never lost even across different chat sessions.
-
-```
-User sends message
-       ↓
-  POST /process       
-       ↓
-  Background server    ← summarizes every 5 messages
-       ↓
-  POST /search         
-```
+**Benchmark:** 83% on LoCoMo conversational memory benchmark running on a 4B local model. GPT-4o scores ~60% from raw recall alone without a memory layer.
 
 ---
 
 ## Quickstart
 
-### 1. Get an API key
-
-Go to [chatsorter-website.vercel.app](https://chatsorter-website.vercel.app) and create a free account to get a key.
-
-### 2. Store a message
+```bash
+# Get an API key
+curl -X POST https://api.chatsorter.com/get-my-key \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "create_if_missing": true}'
+```
 
 ```python
 import requests
 
-API_KEY = "your_api_key_here"
-BASE_URL = "https://ungilled-loan-implosively.ngrok-free.dev"
+API_KEY = "your_key_here"
+HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
-requests.post(f"{BASE_URL}/process", json={
-    "chat_id": "user_123_session_1",
-    "message": "My name is Alice and I'm allergic to peanuts",
-    "user_id": "user_123"
-}, headers={"Authorization": f"Bearer {API_KEY}"})
+# Store a message
+requests.post("https://api.chatsorter.com/process", headers=HEADERS, json={
+    "chat_id": "user_123",
+    "message": "I'm allergic to peanuts and I live in Austin"
+})
+
+# Retrieve relevant memories before generating a response
+r = requests.post("https://api.chatsorter.com/search", headers=HEADERS, json={
+    "chat_id": "user_123",
+    "query": "What should I avoid eating?"
+})
+
+memories = r.json()["memories"]
+# [{"summary": "User is allergic to peanuts", "score": 0.94, "source": "structured"}]
 ```
 
-### 3. Retrieve memories on next session
+```javascript
+// Node.js
+const store = (chatId, message) =>
+  fetch("https://api.chatsorter.com/process", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, message })
+  });
 
-```python
-result = requests.post(f"{BASE_URL}/search", json={
-    "chat_id": "user_123_session_1",
-    "query": "what do I know about this user",
-    "user_id": "user_123"
-}, headers={"Authorization": f"Bearer {API_KEY}"})
-
-memories = result.json()["memories"]
-for memory in memories:
-    print(memory["summary"])
-# → "Alice is allergic to peanuts and shellfish..."
+const retrieve = (chatId, query) =>
+  fetch("https://api.chatsorter.com/search", {
+    method: "POST", 
+    headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, query })
+  }).then(r => r.json());
 ```
 
-### 4. Or use the combined endpoint
+---
 
-```python
-# Store + retrieve in one call
-result = requests.post(f"{BASE_URL}/chat", json={
-    "chat_id": "user_123_session_1",
-    "message": "What should I eat tonight?",
-    "user_id": "user_123"
-}, headers={"Authorization": f"Bearer {API_KEY}"})
+## How It Works
 
-memories  = result.json()["retrieved_memories"]
-# Inject memories into your system prompt
+Every message is scored for importance (1-10). Low signal messages are buffered. Every 5 messages(customizable), a background summary is generated via local LLM inference. High-importance facts, names, allergies, preferences, and relationships are extracted into structured storage immediately and never lost across sessions.
+
+At retrieval time, semantic similarity, importance score, and recency are combined into a composite score. You get back only what's relevant to the current query.
+
+```
+User message
+     ↓
+POST /process  →  Importance scoring  →  Buffer
+                                              ↓ every 5 messages
+                                         Background summary (local LLM)
+                                              ↓
+                                         Stored with embeddings
+     ↓
+POST /search   →  Semantic retrieval   →  Top memories returned
 ```
 
 ---
 
 ## API Reference
 
-### `POST /process`
-Store a message. Returns immediately, summarization runs in the background.
+### POST /process
+Store a message.
 
-**Request**
 ```json
 {
-  "chat_id": "string",
-  "message": "string",
-  "user_id": "string"
+  "chat_id": "user_123",
+  "user_id": "user_123", 
+  "message": "I prefer vegetarian food",
+  "role": "user"
 }
 ```
 
-**Response**
+### POST /search
+Retrieve relevant memories.
+
 ```json
 {
-  "success": true,
-  "data": {
-    "message_count": 5,
-    "buffer_count": 5,
-    "importance_score": 8.5,
-    "queue_depth": 1
-  }
+  "chat_id": "user_123",
+  "query": "what does this user eat",
+  "max_memories": 8,
+  "importance_threshold": 0.0
 }
 ```
 
----
+### POST /ingest
+Bulk ingest conversation history. Runs async, returns a job ID to poll.
 
-### `POST /search`
-Search stored memories for a user.
-
-**Request**
 ```json
 {
-  "chat_id": "string",
-  "query": "string",
-  "user_id": "string"
+  "chat_id": "user_123",
+  "messages": [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."}
+  ]
 }
 ```
 
-**Response**
+### GET /health
 ```json
-{
-  "success": true,
-  "memories": [
-    {
-      "summary": "Alice is 28, lives in Seattle, works as a software engineer.",
-      "importance_score": 8.5,
-      "similarity": 0.91,
-      "composite_score": 0.87,
-      "source": "master",
-      "timestamp": "2025-01-01T00:00:00Z"
-    }
-  ],
-  "total_found": 3,
-  "returned": 3
-}
+{"status": "healthy", "llm_ready": true, "queue_depth": 0}
 ```
 
 ---
 
-### `POST /chat`
-Store a message and retrieve relevant memories in a single call. Recommended for most integrations.
-
-**Request**
-```json
-{
-  "chat_id": "string",
-  "message": "string",
-  "user_id": "string"
-}
-```
-
-**Response**
-```json
-{
-  "success": true,
-  "message_stored": true,
-  "retrieved_memories": [...],
-  "debug": {
-    "buffer_count": 3,
-    "messages_until_summary": 2,
-    "queue_depth": 0
-  }
-}
-```
-
----
-
-### `GET /health`
-Check server status and queue depth.
-
-```json
-{
-  "status": "healthy",
-  "llm_ready": true,
-  "queue_depth": 0,
-  "timestamp": "2025-01-01T00:00:00Z"
-}
-```
-
-### `GET /queue`
-Check how many summaries are pending.
-
-```json
-{
-  "queue_depth": 2,
-  "status": "busy",
-  "llm_ready": true
-}
-```
-
----
-
-## Injecting memories into your system prompt
+## Use With Your LLM
 
 ```python
-def build_system_prompt(memories: list) -> str:
+def build_context(chat_id: str, user_message: str) -> str:
+    r = requests.post("https://api.chatsorter.com/search", headers=HEADERS, json={
+        "chat_id": chat_id,
+        "query": user_message,
+        "max_memories": 8
+    })
+    memories = r.json().get("memories", [])
     if not memories:
-        return "You are a helpful assistant."
-    
-    memory_text = "\n".join([f"- {m['summary']}" for m in memories])
-    
-    return f"""You are a helpful assistant.
+        return ""
+    memory_text = "\n".join(f"- {m['summary']}" for m in memories)
+    return f"What you remember about this user:\n{memory_text}"
 
-What you remember about this user:
-{memory_text}
-
-Use this context naturally in your responses."""
+# Works with any LLM
+system_prompt = build_context(chat_id, user_message)
+response = openai.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+)
 ```
 
 ---
 
-## Memory scoring
+## Self-Hosted
 
-Every message is scored 0-10 for importance before storage:
+Run ChatSorter entirely on your own infrastructure. Data never leaves your network.
 
-| Signal | Example | Boost |
-|--------|---------|-------|
-| Allergy / medical | "I'm allergic to peanuts" | +3.5 |
-| Name | "My name is Alice" | +3.0 |
-| Age | "I'm 28 years old" | +3.0 |
-| Job | "I'm a software engineer" | +2.5 |
-| Location | "I live in Seattle" | +2.5 |
-| Pet | "My dog is named Max" | +2.0 |
-| Preference | "My favorite movie is..." | +1.5 |
+**Requirements:** Python 3.10+, [Ollama](https://ollama.ai)
 
-Memories scoring above 8.0 are promoted to master memory automatically.
+```bash
+git clone https://github.com/codeislife12/Chatsorter
+cd Chatsorter
+pip install -r requirements.txt
+ollama pull gemma3:4b
+ollama pull nomic-embed-text
+python api.py
+```
 
----
-
-## Examples
-
-See the [`/examples`](./examples) folder for:
-- `basic_integration.py`  minimal working integration
-- `system_prompt_injection.py`  how to inject memories into your LLM prompt
+API runs on `localhost:5050`. No outbound calls for data processing; LLM inference runs entirely on your machine.
 
 ---
 
-## FAQ
+## Pricing
 
-**Does it store raw messages?**
-No. Only summaries are stored. Raw messages are held in memory briefly for summarization then discarded.
+| | Free | Starter | Growth | Enterprise |
+|--|------|---------|--------|------------|
+| End users | 10 | 500 | 5,000 | Unlimited |
+| Memories | 1,000 | 50,000 | 500,000 | Unlimited |
+| Hosting | Cloud | Cloud | Cloud | Self-hosted |
+| Support | Community | Email | Priority | Dedicated |
+| Price | $0 | $49/mo | $149/mo | Contact us |
 
-**What happens if the LLM is busy?**
-`/process` returns immediately regardless. Summarization is queued and runs in the background.
-
-**How many messages before a summary is generated?**
-Default is every 5 messages. Configurable via `/update-settings`.
-
-**Is it open source?**
-The API is closed source. Examples and documentation are open.
+Self-hosted commercial license available for teams that need data sovereignty. Suitable for healthcare, legal, and financial applications where conversation data cannot leave your infrastructure.
 
 ---
 
-## Get started
+## Benchmark
 
-[Get a free beta key](https://chatsorter-website.vercel.app)
+Evaluated on [LoCoMo](https://github.com/snap-research/locomo), 10 multi-session conversations, ~1,540 questions across single-hop, multi-hop, temporal, and open-domain categories.
+
+| Model | Score | Notes |
+|-------|-------|-------|
+| GPT-4o (no memory layer) | ~60% | Raw model recall only |
+| ChatSorter + gemma3:4b local | 83%* | Full memory pipeline, no API costs |
+
+*Projected ceiling based on failure analysis on conversation 26. Full benchmark in progress.
+
+Transparent methodology: failures are categorized and documented. We don't cherry-pick results.
+
+---
+
+## Stack
+
+- **API:** Python, Flask, Waitress
+- **LLM inference:** Ollama (gemma3:4b default)
+- **Embeddings:** nomic-embed-text
+- **Storage:** Local JSON + FAISS vector index
+- **Auth:** SQLite
+
+---
+
+## License
+
+MIT for personal and small-scale use (under 10 end users).  
+Commercial license required for production deployments above 10 end users.  
+Contact for enterprise self-hosted licensing.
+
+---
+
+## Links
+
+- **Website:** [chatsorter.com](https://chatsorter.com)
+- **API:** [api.chatsorter.com](https://api.chatsorter.com)
+- **Demo key:** `cs_demo_hMMtC_Jgtelh9shbyIjLQOC4USBeQJRCup46dCD_CLE`
