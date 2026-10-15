@@ -451,7 +451,7 @@ ChatSorter's licensing terms depend on how you use the software.
 
 The stated terms permit personal use and deployments with fewer than 10 end users. Production deployments above that limit require a commercial license under the applicable licensing terms.
 
-For enterprise and self-hosted commercial licensing, contact [chatsorter@gmail.com](mailto:chatsorter@gmail.com).
+For enterprise and self-hosted commercial licensing, contact [jacob@chatsorter.com](mailto:jacob@chatsorter.com).
 
 Review the repository's `LICENSE` file and any applicable commercial agreement before deploying the software.
 
